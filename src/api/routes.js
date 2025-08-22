@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { getAllUsers } = require('../services/userService'); // Import our new function
-const { processEvent, getNotificationsForUser } = require('../services/notificationService'); // <-- Import
+
+// Import from all three of our service files
+const { getAllUsers } = require('../services/userService');
+const { processEvent, getNotificationsForUser } = require('../services/notificationService');
 const { createPost, createComment } = require('../services/contentService');
 
-// GET /api/users
+// --- User Route ---
 router.get('/users', async (req, res) => {
   try {
     const users = await getAllUsers();
@@ -15,17 +17,7 @@ router.get('/users', async (req, res) => {
   }
 });
 
-// POST /api/events (NEW ROUTE)
-router.post('/events', async (req, res) => {
-  try {
-    const result = await processEvent(req.body); // <-- Capture the result
-    res.status(200).json(result); // <-- Send the result back to the client
-  } catch (error) {
-    console.error('Error processing event:', error);
-    res.status(500).json({ message: 'Failed to process event.' });
-  }
-});
-
+// --- Notification Route ---
 router.get('/notifications/:userId', async (req, res) => {
   try {
     const { userId } = req.params;
@@ -39,26 +31,36 @@ router.get('/notifications/:userId', async (req, res) => {
 
 // --- Content Creation Routes ---
 router.post('/posts', async (req, res) => {
-    try {
-        const { actorId, title, content } = req.body;
-        const newPost = await createPost(actorId, title, content || ''); // Add default content
-        res.status(201).json(newPost);
-    } catch (error) {
-        console.error('Error creating post:', error);
-        res.status(500).json({ message: 'Failed to create post.' });
-    }
+  try {
+    const { actorId, title, content } = req.body;
+    const newPost = await createPost(actorId, title, content || '');
+    res.status(201).json(newPost);
+  } catch (error) {
+    console.error('Error creating post:', error);
+    res.status(500).json({ message: 'Failed to create post.' });
+  }
 });
 
 router.post('/comments', async (req, res) => {
     try {
-        const { actorId, entityId, content } = req.body; // Changed postId to entityId
-        // For now, we only support commenting on posts
+        const { actorId, entityId, content } = req.body;
         const newComment = await createComment(actorId, entityId, content);
         res.status(201).json(newComment);
     } catch (error) {
         console.error('Error creating comment:', error);
         res.status(500).json({ message: 'Failed to create comment.' });
     }
+});
+
+// --- Generic Event Route (for Follows and Likes) ---
+router.post('/events', async (req, res) => {
+  try {
+    const result = await processEvent(req.body);
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Error processing event:', error);
+    res.status(500).json({ message: 'Failed to process event.' });
+  }
 });
 
 module.exports = router;
