@@ -1,0 +1,30 @@
+{
+  "name": "insyd-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+      "start": "node src/index.js",
+      "dev": "nodemon --legacy-watch src/index.js",
+      "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Drexter-07/insyd-backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Drexter-07/insyd-backend/issues"
+  },
+  "homepage": "https://github.com/Drexter-07/insyd-backend#readme",
+  "description": "",
+  "dependencies": {
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
+    "tedious": "^18.6.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
