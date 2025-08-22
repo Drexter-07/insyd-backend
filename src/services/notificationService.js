@@ -3,17 +3,24 @@ const { getUserById } = require('./userService');
 
 // A helper function to make our query code cleaner
 // Helper to execute any SQL query
+// This is the new, robust helper function that always returns an array
 function executeQuery(sql) {
   return new Promise((resolve, reject) => {
     const connection = getConnection();
-    const rows = [];
+    const rows = []; // Always start with an empty array
+
     const request = new Request(sql, (err, rowCount) => {
       if (err) {
         console.error("SQL Error:", err.message);
         return reject(err);
       }
-      resolve(rows.length > 0 ? rows : rowCount);
+      // When the request is fully complete, resolve with the array of rows we collected.
+      // For a SELECT, it contains the results.
+      // For an INSERT...OUTPUT, it contains the output.
+      // For a simple INSERT/DELETE, it's a safe empty array.
+      resolve(rows);
     });
+
     request.on('row', (columns) => {
       const row = {};
       columns.forEach((column) => {
@@ -21,6 +28,7 @@ function executeQuery(sql) {
       });
       rows.push(row);
     });
+
     connection.execSql(request);
   });
 }
@@ -169,6 +177,7 @@ async function createLikeNotification(actorId, entityId, entityType) {
 
 // The FINAL processEvent ENGINE
 async function processEvent(event) {
+    console.log("--- processEvent was called with: ---", event);
     const { eventType } = event;
     console.log(`Processing event: ${eventType}`);
 
