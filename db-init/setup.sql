@@ -19,7 +19,43 @@ CREATE TABLE Users (
 );
 GO
 
--- Step 4: Create the Follows table
+-- ADDED: Create the Posts table for user-generated content
+CREATE TABLE Posts (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    author_id INT NOT NULL,
+    title NVARCHAR(255) NOT NULL,
+    content NVARCHAR(MAX),
+    created_at DATETIME2 DEFAULT GETDATE(),
+    FOREIGN KEY (author_id) REFERENCES Users(id)
+);
+GO
+
+-- ADDED: Create the Comments table, linked to posts and users
+CREATE TABLE Comments (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    post_id INT NOT NULL,
+    author_id INT NOT NULL,
+    content NVARCHAR(MAX),
+    created_at DATETIME2 DEFAULT GETDATE(),
+    FOREIGN KEY (post_id) REFERENCES Posts(id),
+    FOREIGN KEY (author_id) REFERENCES Users(id)
+);
+GO
+
+-- ADDED: Create a flexible Likes table for posts, comments, etc.
+CREATE TABLE Likes (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    user_id INT NOT NULL,
+    entity_id INT NOT NULL,
+    entity_type NVARCHAR(50) NOT NULL, -- e.g., 'post' or 'comment'
+    created_at DATETIME2 DEFAULT GETDATE(),
+    FOREIGN KEY (user_id) REFERENCES Users(id),
+    -- This ensures a user can only like a specific item once
+    UNIQUE(user_id, entity_id, entity_type)
+);
+GO
+
+-- Create the Follows table
 CREATE TABLE Follows (
     follower_id INT NOT NULL,
     following_id INT NOT NULL,
@@ -29,7 +65,7 @@ CREATE TABLE Follows (
 );
 GO
 
--- Step 5: Create the Notifications table
+-- Create the Notifications table
 CREATE TABLE Notifications (
     id INT IDENTITY(1,1) PRIMARY KEY,
     recipient_id INT NOT NULL,
@@ -45,7 +81,7 @@ CREATE TABLE Notifications (
 );
 GO
 
--- Step 6: Insert dummy users
+-- Insert dummy users
 INSERT INTO Users (name, email, job_role, specialization, city, profile_summary) VALUES
 ('Alice Johnson', 'alice@insyd.com', 'Principal Architect', 'Sustainable Design', 'Mumbai', 'An award-winning architect with 15 years of experience in creating green, sustainable urban spaces.'),
 ('Bob Williams', 'bob@insyd.com', 'Interior Designer', 'Residential Spaces', 'Delhi', 'Specializes in minimalist and functional interior design for modern homes.'),
