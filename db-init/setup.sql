@@ -14,30 +14,42 @@ CREATE TABLE Users (
     job_role NVARCHAR(100),
     specialization NVARCHAR(100),
     city NVARCHAR(100),
+    company_name NVARCHAR(255), -- <-- ADDED THIS LINE
     profile_summary NVARCHAR(MAX),
     created_at DATETIME2 DEFAULT GETDATE()
 );
 GO
 
--- ADDED: Create the Posts table for user-generated content
-CREATE TABLE Posts (
+-- RENAMED: from Posts to Articles
+CREATE TABLE Articles (
     id INT IDENTITY(1,1) PRIMARY KEY,
-    author_id INT NOT NULL,
+    author_id INT NOT NULL REFERENCES Users(id),
     title NVARCHAR(255) NOT NULL,
     content NVARCHAR(MAX),
-    created_at DATETIME2 DEFAULT GETDATE(),
-    FOREIGN KEY (author_id) REFERENCES Users(id)
+    created_at DATETIME2 DEFAULT GETDATE()
 );
 GO
 
--- ADDED: Create the Comments table, linked to posts and users
+-- ADDED: The new Jobs table
+CREATE TABLE Jobs (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    author_id INT NOT NULL REFERENCES Users(id), -- The recruiter/poster
+    title NVARCHAR(255) NOT NULL,
+    company_name NVARCHAR(255),
+    location NVARCHAR(255),
+    description NVARCHAR(MAX),
+    created_at DATETIME2 DEFAULT GETDATE()
+);
+GO
+
+-- Create the Comments table, now linked correctly to the Articles table
 CREATE TABLE Comments (
     id INT IDENTITY(1,1) PRIMARY KEY,
-    post_id INT NOT NULL,
+    article_id INT NOT NULL, -- Renamed for clarity
     author_id INT NOT NULL,
     content NVARCHAR(MAX),
     created_at DATETIME2 DEFAULT GETDATE(),
-    FOREIGN KEY (post_id) REFERENCES Posts(id),
+    FOREIGN KEY (article_id) REFERENCES Articles(id), -- Corrected table reference
     FOREIGN KEY (author_id) REFERENCES Users(id)
 );
 GO
@@ -82,8 +94,8 @@ CREATE TABLE Notifications (
 GO
 
 -- Insert dummy users
-INSERT INTO Users (name, email, job_role, specialization, city, profile_summary) VALUES
-('Alice Johnson', 'alice@insyd.com', 'Principal Architect', 'Sustainable Design', 'Mumbai', 'An award-winning architect with 15 years of experience in creating green, sustainable urban spaces.'),
-('Bob Williams', 'bob@insyd.com', 'Interior Designer', 'Residential Spaces', 'Delhi', 'Specializes in minimalist and functional interior design for modern homes.'),
-('Charlie Brown', 'charlie@insyd.com', 'Architecture Student', 'Urban Planning', 'Bangalore', 'A final-year student passionate about the future of smart cities and public transport infrastructure.');
+INSERT INTO Users (name, email, job_role, specialization, city, company_name, profile_summary) VALUES
+('Alice Johnson', 'alice@insyd.com', 'Principal Architect', 'Sustainable Design', 'Mumbai', 'Innovate Arch Inc.', 'An award-winning architect...'),
+('Bob Williams', 'bob@insyd.com', 'Interior Designer', 'Residential Spaces', 'Delhi', 'DesignRight', 'Specializes in minimalist...'),
+('Charlie Brown', 'charlie@insyd.com', 'Architecture Student', 'Urban Planning', 'Bangalore', NULL, 'A final-year student...'); -- Charlie is a student, so no company
 GO

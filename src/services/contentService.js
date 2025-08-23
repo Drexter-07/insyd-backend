@@ -1,34 +1,66 @@
-const { processEvent, executeQuery } = require('./notificationService');
+const { processEvent } = require('./notificationService');
+const { executeQuery } = require('./dbHelpers');
 
-async function createPost(actorId, title, content) {
-    const insertQuery = `INSERT INTO Posts (author_id, title, content) OUTPUT INSERTED.id, INSERTED.title VALUES (${actorId}, '${title.replace(/'/g, "''")}', '${content.replace(/'/g, "''")}');`;
+// RENAMED from createPost to createArticle
+async function createArticle(actorId, title, content) {
+    // UPDATED: Inserts into the 'Articles' table now
+    const insertQuery = `INSERT INTO Articles (author_id, title, content) OUTPUT INSERTED.id, INSERTED.title VALUES (${actorId}, '${title.replace(/'/g, "''")}', '${content.replace(/'/g, "''")}');`;
     const result = await executeQuery(insertQuery);
-    const newPost = result[0];
+    const newArticle = result[0];
 
-    // After creating the post, fire the notification event internally
+    // UPDATED: Fires a 'NEW_ARTICLE' event for consistency
     await processEvent({
-        eventType: 'NEW_POST',
+        eventType: 'NEW_ARTICLE',
         actorId: actorId,
-        postId: newPost.id,
-        postTitle: newPost.title
+        articleId: newArticle.id,
+        articleTitle: newArticle.title
     });
 
-    return newPost;
+    return newArticle;
 }
 
-async function createComment(actorId, entityId, content) { // Changed postId to entityId
-    const insertQuery = `INSERT INTO Comments (post_id, author_id, content) OUTPUT INSERTED.id VALUES (${entityId}, ${actorId}, '${content.replace(/'/g, "''")}');`;
+
+async function createComment(actorId, entityId, content) {
+    const insertQuery = `INSERT INTO Comments (article_id, author_id, content) OUTPUT INSERTED.id VALUES (${entityId}, ${actorId}, '${content.replace(/'/g, "''")}');`;
     const result = await executeQuery(insertQuery);
     const newComment = result[0];
 
-    // After creating the comment, fire the notification event
+    // UPDATED: Event now sends entityId for consistency in the event object
     await processEvent({
         eventType: 'NEW_COMMENT',
         actorId: actorId,
-        postId: entityId // Internally we can still call it postId for clarity
+        entityId: entityId // This now matches the API request
     });
     
     return newComment;
 }
 
-module.exports = { createPost, createComment };
+// --- ADDED: The new createJob function ---
+async function createJob(actorId, title, companyName, location) {
+    const insertQuery = `INSERT INTO Jobs (author_id, title, company_name, location) OUTPUT INSERTED.id, INSERTED.title VALUES (${actorId}, '${title.replace(/'/g, "''")}', '${companyName.replace(/'/g, "''")}', '${location.replace(/'/g, "''")}');`;
+    const result = await executeQuery(insertQuery);
+    const newJob = result[0];
+
+    // After creating the job, fire the notification event
+    await processEvent({
+        eventType: 'NEW_JOB',
+        actorId: actorId,
+        jobId: newJob.id,
+        jobTitle: newJob.title
+    });
+
+    return newJob; // Return the new job to the API route
+}
+
+
+// --- ADD these two new functions ---
+async function getAllArticles() {
+    return await executeQuery('SELECT * FROM Articles ORDER BY created_at DESC;');
+}
+
+async function getAllJobs() {
+    return await executeQuery('SELECT * FROM Jobs ORDER BY created_at DESC;');
+}
+
+
+module.exports = { createArticle, createComment, createJob, getAllArticles, getAllJobs  };

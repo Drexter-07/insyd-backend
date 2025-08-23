@@ -1,38 +1,5 @@
-const { getConnection, Request } = require('../config/db');
 const { getUserById } = require('./userService');
-
-// A helper function to make our query code cleaner
-// Helper to execute any SQL query
-// This is the new, robust helper function that always returns an array
-function executeQuery(sql) {
-  return new Promise((resolve, reject) => {
-    const connection = getConnection();
-    const rows = []; // Always start with an empty array
-
-    const request = new Request(sql, (err, rowCount) => {
-      if (err) {
-        console.error("SQL Error:", err.message);
-        return reject(err);
-      }
-      // When the request is fully complete, resolve with the array of rows we collected.
-      // For a SELECT, it contains the results.
-      // For an INSERT...OUTPUT, it contains the output.
-      // For a simple INSERT/DELETE, it's a safe empty array.
-      resolve(rows);
-    });
-
-    request.on('row', (columns) => {
-      const row = {};
-      columns.forEach((column) => {
-        row[column.metadata.colName] = column.value;
-      });
-      rows.push(row);
-    });
-
-    connection.execSql(request);
-  });
-}
-
+const { executeQuery } = require('./dbHelpers');
 
 // This new function handles the entire follow/unfollow logic
 async function toggleFollow(actorId, recipientId) {
@@ -69,30 +36,36 @@ async function toggleFollow(actorId, recipientId) {
     }
 }
 
-async function createPostNotifications(actorId, postId, postTitle) {
+// --- RENAMED and UPDATED for Articles ---
+async function createArticleNotifications(actorId, articleId, articleTitle) {
   const actor = await getUserById(actorId);
-  // 1. Get all followers of the post's author
   const followers = await executeQuery(`SELECT follower_id FROM Follows WHERE following_id = ${actorId};`);
+  if (followers.length === 0) return;
 
-  if (followers.length === 0) {
-    console.log(`Actor ${actorId} has no followers. No notifications to create for NEW_POST.`);
-    return;
-  }
-
-  // 2. Create a notification for each follower
-  // To prevent sending a huge number of notifications at once (the "thundering herd" problem),
-  // let's just notify the first 5 followers for this POC. This is a good scalability point to discuss.
-  const content = `${actor.name} published a new article: "${postTitle}"`;
-  const followersToNotify = followers.slice(0, 5);
-
-  for (const follower of followersToNotify) {
-    // We use .replace(/'/g, "''") to escape single quotes in the title to prevent SQL errors
+  const content = `${actor.name} published a new article: "${articleTitle}"`;
+  for (const follower of followers) {
     await executeQuery(
       `INSERT INTO Notifications (recipient_id, actor_id, event_type, entity_id, entity_type, content)
-       VALUES (${follower.follower_id}, ${actorId}, 'NEW_POST', ${postId}, 'post', '${content.replace(/'/g, "''")}');`
+       VALUES (${follower.follower_id}, ${actorId}, 'NEW_ARTICLE', ${articleId}, 'article', '${content.replace(/'/g, "''")}');`
     );
   }
-  console.log(`Created ${followersToNotify.length} notifications for new post ${postId}.`);
+  console.log(`Created ${followers.length} notifications for new article ${articleId}.`);
+}
+
+// --- ADDED: The new createJobNotifications function ---
+async function createJobNotifications(actorId, jobId, jobTitle) {
+    const actor = await getUserById(actorId);
+    const followers = await executeQuery(`SELECT follower_id FROM Follows WHERE following_id = ${actorId};`);
+    if (followers.length === 0) return;
+
+    const content = `${actor.name} posted a new job: "${jobTitle}"`;
+    for (const follower of followers) {
+        await executeQuery(
+            `INSERT INTO Notifications (recipient_id, actor_id, event_type, entity_id, entity_type, content)
+            VALUES (${follower.follower_id}, ${actorId}, 'NEW_JOB', ${jobId}, 'job', '${content.replace(/'/g, "''")}');`
+        );
+    }
+    console.log(`Created ${followers.length} notifications for new job ${jobId}.`);
 }
 
 // Add this new function to get all notifications for a given user
@@ -122,22 +95,21 @@ async function getNotificationsForUser(userId) {
 }
 
 // --- FUNCTION for NEW_COMMENT event ---
-async function createCommentNotification(actorId, postId) {
+async function createCommentNotification(actorId, entityId) { 
     const commenter = await getUserById(actorId);
-    const postResult = await executeQuery(`SELECT author_id, title FROM Posts WHERE id = ${postId};`);
-    if (postResult.length === 0) throw new Error(`Post with ID ${postId} not found.`);
-    const post = postResult[0];
+    // We still query the Articles table, because we know this is a comment on an article.
+    const articleResult = await executeQuery(`SELECT author_id, title FROM Articles WHERE id = ${entityId};`);
+    if (articleResult.length === 0) throw new Error(`Article with ID ${entityId} not found.`);
+    const article = articleResult[0];
     
-    // Do not notify users if they comment on their own post
-    if (actorId === post.author_id) return;
+    if (actorId === article.author_id) return;
 
-    // Create the notification for the post's author
-    const content = `${commenter.name} commented on your post: "${post.title}"`;
+    const content = `${commenter.name} commented on your article: "${article.title}"`;
     await executeQuery(
         `INSERT INTO Notifications (recipient_id, actor_id, event_type, entity_id, entity_type, content)
-         VALUES (${post.author_id}, ${actorId}, 'NEW_COMMENT', ${postId}, 'post', '${content.replace(/'/g, "''")}');`
+         VALUES (${article.author_id}, ${actorId}, 'NEW_COMMENT', ${entityId}, 'article', '${content.replace(/'/g, "''")}');`
     );
-    console.log(`Created NEW_COMMENT notification for post author ${post.author_id}.`);
+    console.log(`Created NEW_COMMENT notification for article author ${article.author_id}.`);
 }
 
 
@@ -154,7 +126,7 @@ async function createLikeNotification(actorId, entityId, entityType) {
             contentSnippet = `your post: "${post.title}"`;
         }
     } else if (entityType === 'comment') {
-        // This part is for liking comments, which you can test later
+        // This part is for liking comments, 
         const comment = (await executeQuery(`SELECT author_id, content FROM Comments WHERE id = ${entityId};`))[0];
         if (comment) {
             contentAuthorId = comment.author_id;
@@ -175,23 +147,25 @@ async function createLikeNotification(actorId, entityId, entityType) {
 
 
 
-// The FINAL processEvent ENGINE
+// --- The FINAL processEvent ENGINE with all event types ---
 async function processEvent(event) {
-    console.log("--- processEvent was called with: ---", event);
     const { eventType } = event;
-    console.log(`Processing event: ${eventType}`);
-
     switch (eventType) {
         case 'FOLLOW':
             return await toggleFollow(event.actorId, event.recipientId);
+        
+        // UPDATED eventType
+        case 'NEW_ARTICLE':
+            await createArticleNotifications(event.actorId, event.articleId, event.articleTitle);
+            return { status: 'article_notifications_created' };
 
-        case 'NEW_POST':
-            // This logic is now in contentService.js, so we just create the notification
-            await createPostNotifications(event.actorId, event.postId, event.postTitle);
-            return { status: 'post_notifications_created' };
+        // ADDED eventType
+        case 'NEW_JOB':
+            await createJobNotifications(event.actorId, event.jobId, event.jobTitle);
+            return { status: 'job_notifications_created' };
 
         case 'NEW_COMMENT':
-            await createCommentNotification(event.actorId, event.postId);
+            await createCommentNotification(event.actorId, event.entityId); 
             return { status: 'comment_notification_created' };
 
         case 'NEW_LIKE':
@@ -202,12 +176,8 @@ async function processEvent(event) {
                 return { status: 'liked' };
              } catch (error) {
                 // This is the "unlike" logic
-                console.log('Duplicate like detected, processing as UNLIKE.');
                 await executeQuery(`DELETE FROM Likes WHERE user_id = ${event.actorId} AND entity_id = ${event.entityId} AND entity_type = '${event.entityType}';`);
-                
-                // Also delete the original "like" notification
                 await executeQuery(`DELETE FROM Notifications WHERE actor_id = ${event.actorId} AND entity_id = ${event.entityId} AND entity_type = '${event.entityType}' AND event_type = 'NEW_LIKE';`);
-                
                 return { status: 'unliked' };
              }
 
