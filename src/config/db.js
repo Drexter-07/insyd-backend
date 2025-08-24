@@ -1,56 +1,36 @@
-const { Connection, Request } = require('tedious');
+const sql = require('mssql');
 
 const config = {
-  server: process.env.DB_HOST,
-  authentication: {
-    type: 'default',
-    options: {
-      userName: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-    },
-  },
-  options: {
-    encrypt: true,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    server: process.env.DB_HOST,
     database: process.env.DB_NAME,
     port: parseInt(process.env.DB_PORT, 10),
-    trustServerCertificate: true,
-  },
+    pool: {
+        max: 10, // Max number of connections
+        min: 0,
+        idleTimeoutMillis: 30000
+    },
+    options: {
+        encrypt: true, // Use true for Azure SQL, or if your SQL Server requires it
+        trustServerCertificate: true // Use true for local development
+    }
 };
 
-let connection;
-
-function connectDb(retries = 5) {
-  return new Promise((resolve, reject) => {
-    console.log('Attempting to connect to the database...');
-    const newConnection = new Connection(config);
-
-    newConnection.on('connect', (err) => {
-      if (err) {
-        console.error('Database Connection Failed:', err.message);
-        if (retries > 0) {
-          console.log(`Retrying connection... (${retries} retries left)`);
-          setTimeout(() => {
-            connectDb(retries - 1).then(resolve).catch(reject);
-          }, 5000);
-        } else {
-          reject(new Error("Could not connect to the database after multiple retries."));
-        }
-      } else {
+// Create a single, shared pool promise
+const poolPromise = new sql.ConnectionPool(config)
+    .connect()
+    .then(pool => {
         console.log('Successfully connected to the database.');
-        connection = newConnection;
-        resolve(connection);
-      }
+        return pool;
+    })
+    .catch(err => {
+        console.error('Database Connection Failed! Check your configuration.', err);
+        // Exit the process if the DB connection fails, as the app is useless without it
+        process.exit(1); 
     });
 
-    newConnection.connect();
-  });
-}
-
-function getConnection() {
-    if (!connection) {
-        throw new Error("Database not connected.");
-    }
-    return connection;
-}
-
-module.exports = { connectDb, getConnection, Request };
+module.exports = {
+    sql,
+    poolPromise
+};
